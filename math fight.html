@@ -1,0 +1,1269 @@
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math RPG: Turn-Based Probability Quest</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;700;800&family=Prompt:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        pastelBg: '#FFF0F5',
+                        cutePink: '#FF6B8B',
+                        cutePurple: '#8A2BE2',
+                        cuteYellow: '#FFD700',
+                        cuteGreen: '#2ECC71',
+                        cuteBlue: '#00BFFF',
+                    },
+                    fontFamily: {
+                        kanit: ['Kanit', 'sans-serif'],
+                        prompt: ['Prompt', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            background: linear-gradient(135deg, #FFE4E1 0%, #E6E6FA 50%, #E0F7FA 100%);
+            min-height: 100vh;
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        /* Float & Idle Animation */
+        @keyframes heroFloat {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-8px) rotate(1deg); }
+        }
+
+        @keyframes monsterFloat {
+            0%, 100% { transform: translateY(0px) rotate(0deg) scale(1); }
+            50% { transform: translateY(-10px) rotate(-1.5deg) scale(1.02); }
+        }
+
+        /* Combat Action Animations */
+        @keyframes shakeScreen {
+            0%, 100% { transform: translate(0, 0); }
+            20% { transform: translate(-8px, 5px); }
+            40% { transform: translate(8px, -5px); }
+            60% { transform: translate(-5px, -5px); }
+            80% { transform: translate(5px, 5px); }
+        }
+
+        @keyframes playerAttackAnim {
+            0% { transform: translateX(0) scale(1); }
+            30% { transform: translateX(-20px) scale(0.95); }
+            60% { transform: translateX(120px) scale(1.2) rotate(8deg); }
+            100% { transform: translateX(0) scale(1); }
+        }
+
+        @keyframes monsterAttackAnim {
+            0% { transform: translateX(0) scale(1); }
+            30% { transform: translateX(20px) scale(0.95); }
+            60% { transform: translateX(-120px) scale(1.2) rotate(-8deg); }
+            100% { transform: translateX(0) scale(1); }
+        }
+
+        @keyframes damageFloat {
+            0% { opacity: 1; transform: translateY(0) scale(0.8); }
+            40% { opacity: 1; transform: translateY(-40px) scale(1.4); }
+            100% { opacity: 0; transform: translateY(-70px) scale(1); }
+        }
+
+        @keyframes healGlow {
+            0% { opacity: 0; transform: scale(0.5); }
+            50% { opacity: 0.8; transform: scale(1.3); }
+            100% { opacity: 0; transform: scale(1.6); }
+        }
+
+        @keyframes slashBeam {
+            0% { opacity: 0; transform: scale(0.2) rotate(-45deg); }
+            50% { opacity: 1; transform: scale(1.4) rotate(-45deg); }
+            100% { opacity: 0; transform: scale(2) rotate(-45deg); }
+        }
+
+        .animate-hero-idle { animation: heroFloat 3.5s ease-in-out infinite; }
+        .animate-monster-idle { animation: monsterFloat 3s ease-in-out infinite; }
+        .animate-shake { animation: shakeScreen 0.4s ease-in-out; }
+        .attack-player { animation: playerAttackAnim 0.6s ease-in-out; }
+        .animate-attack-monster { animation: monsterAttackAnim 0.6s ease-in-out; }
+        .damage-popup { animation: damageFloat 1.2s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            box-shadow: 0 15px 30px -10px rgba(255, 105, 180, 0.2);
+        }
+
+        .hp-fill {
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .slash-fx {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,105,180,0.8), rgba(138,43,226,0.9));
+            clip-path: polygon(10% 0%, 100% 40%, 90% 100%, 0% 60%);
+            animation: slashBeam 0.4s ease-out forwards;
+            pointer-events: none;
+            z-index: 40;
+        }
+
+        .heal-fx {
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(46,204,113,0.8) 0%, rgba(46,204,113,0) 70%);
+            animation: healGlow 0.8s ease-out forwards;
+            pointer-events: none;
+            z-index: 40;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-2 sm:p-4 min-h-screen">
+
+    <div id="game-app" class="w-full max-w-4xl min-h-[660px] glass-card rounded-3xl p-4 sm:p-6 flex flex-col justify-between relative overflow-hidden my-auto shadow-2xl transition-all">
+        
+        <!-- Header Info Bar -->
+        <header class="flex justify-between items-center bg-white/80 backdrop-blur rounded-2xl p-3 px-4 sm:px-6 border border-pink-100 shadow-sm">
+            <div class="flex items-center space-x-3">
+                <span class="text-3xl">⚔️</span>
+                <div>
+                    <h1 class="font-kanit font-extrabold text-lg sm:text-xl text-pink-600 leading-none">Math RPG</h1>
+                    <span class="text-xs text-purple-600 font-semibold">ศึกตัวแปรสุ่มความน่าจะเป็น ม.6</span>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <!-- BGM Music Button -->
+                <button id="btn-bgm" onclick="toggleBGM()" class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 hover:bg-purple-200 flex items-center justify-center transition shadow-sm" title="เปิด/ปิด เพลงประกอบ">
+                    <i id="bgm-icon" class="fa-solid fa-music text-base"></i>
+                </button>
+
+                <!-- Sound Effects Button -->
+                <button id="btn-sound" onclick="toggleSound()" class="w-10 h-10 rounded-full bg-pink-100 text-pink-600 hover:bg-pink-200 flex items-center justify-center transition shadow-sm" title="เปิด/ปิด เสียงเอฟเฟกต์">
+                    <i id="sound-icon" class="fa-solid fa-volume-high text-base"></i>
+                </button>
+
+                <!-- Stage Badge -->
+                <div class="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold font-kanit px-3.5 py-1.5 rounded-full text-xs sm:text-sm shadow-md flex items-center space-x-1.5">
+                    <i class="fa-solid fa-trophy text-yellow-300 text-xs"></i>
+                    <span>ด่าน <span id="stage-num">1</span></span>
+                </div>
+
+                <!-- Score Badge -->
+                <div class="bg-amber-100 text-amber-800 font-bold px-3 py-1.5 rounded-full text-xs border border-amber-300 hidden sm:block">
+                    คะแนน: <span id="score-text">0</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="relative flex-1 flex flex-col justify-between py-4">
+            
+            <!-- FX Overlay Layer -->
+            <div id="fx-layer" class="absolute inset-0 pointer-events-none z-30"></div>
+
+            <!-- Battle Arena -->
+            <div class="grid grid-cols-2 gap-4 items-center my-auto min-h-[260px] relative">
+                
+                <!-- Hero Character (Left) -->
+                <div class="flex flex-col items-center justify-center relative">
+                    <!-- Hero Health Bar Card -->
+                    <div class="w-full max-w-[210px] bg-white/95 rounded-2xl p-3 shadow-md border border-pink-200 mb-2 z-10">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-bold text-xs sm:text-sm text-pink-600 font-kanit flex items-center gap-1">
+                                <span>🌸</span> <span id="hero-name-label">น้องจอมเวทสถิติ</span>
+                            </span>
+                            <span class="text-[10px] font-extrabold px-2 py-0.5 bg-pink-100 text-pink-700 rounded-full">Lv.<span id="hero-level">1</span></span>
+                        </div>
+                        <!-- Health Bar -->
+                        <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden border border-gray-300 relative shadow-inner">
+                            <div id="hero-hp-bar" class="hp-fill h-full bg-gradient-to-r from-emerald-400 to-green-500 rounded-full w-full"></div>
+                        </div>
+                        <div class="flex justify-between items-center text-[11px] text-gray-600 mt-1 font-mono font-bold">
+                            <span id="hero-status-tag" class="text-[10px] text-emerald-600">พร้อมสู้!</span>
+                            <span><span id="hero-hp-text">100</span> / <span id="hero-max-hp-text">100</span> HP</span>
+                        </div>
+                    </div>
+
+                    <!-- Hero SVG Graphic -->
+                    <div id="hero-avatar" class="relative animate-hero-idle transition-all duration-300">
+                        <div class="w-32 h-32 sm:w-40 sm:h-40 relative flex items-center justify-center">
+                            <svg viewBox="0 0 200 200" class="w-full h-full drop-shadow-xl">
+                                <circle cx="100" cy="100" r="85" fill="#FFE6EE" opacity="0.7" />
+                                <path d="M 50,110 Q 30,170 60,185 Q 100,195 140,185 Q 170,170 150,110 Z" fill="#8A2BE2" />
+                                <path d="M 45,100 Q 30,165 60,180 Q 100,170 140,180 Q 170,165 155,100 Z" fill="#FF6B8B" />
+                                <circle cx="100" cy="95" r="48" fill="#FFE5D9" />
+                                <ellipse cx="80" cy="90" rx="7" ry="11" fill="#2C3E50" />
+                                <ellipse cx="120" cy="90" rx="7" ry="11" fill="#2C3E50" />
+                                <circle cx="78" cy="87" r="3" fill="#FFFFFF" />
+                                <circle cx="118" cy="87" r="3" fill="#FFFFFF" />
+                                <ellipse cx="72" cy="101" rx="7" ry="4" fill="#FF85A1" opacity="0.8" />
+                                <ellipse cx="128" cy="101" rx="7" ry="4" fill="#FF85A1" opacity="0.8" />
+                                <path d="M 92,105 Q 100,113 108,105" stroke="#2C3E50" stroke-width="3" fill="none" stroke-linecap="round"/>
+                                <path d="M 52,90 C 50,50 150,50 148,90 C 130,65 70,65 52,90 Z" fill="#FF6B8B" />
+                                <path d="M 65,58 L 100,20 L 135,58 L 115,52 L 100,62 L 85,52 Z" fill="#FFD700" stroke="#FF8C00" stroke-width="2"/>
+                                <circle cx="100" cy="20" r="5" fill="#FF1493" />
+                                <path d="M 65,135 Q 100,120 135,135 L 145,185 Q 100,195 55,185 Z" fill="#9B59B6" />
+                                <path d="M 85,130 L 115,130 L 100,185 Z" fill="#FFFFFF" />
+                                <rect x="145" y="80" width="8" height="70" rx="4" fill="#8B4513" transform="rotate(-20 145 80)"/>
+                                <polygon points="152,70 157,80 168,82 160,90 162,101 152,95 142,101 144,90 136,82 147,80" fill="#FFD700" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monster Character (Right) -->
+                <div class="flex flex-col items-center justify-center relative">
+                    <!-- Monster Health Bar Card -->
+                    <div class="w-full max-w-[210px] bg-white/95 rounded-2xl p-3 shadow-md border border-purple-200 mb-2 z-10">
+                        <div class="flex justify-between items-center mb-1">
+                            <span id="monster-name" class="font-bold text-xs sm:text-sm text-purple-700 font-kanit">👾 สไลม์ทฤษฎี</span>
+                            <span class="text-[10px] font-extrabold px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">Boss</span>
+                        </div>
+                        <!-- Health Bar -->
+                        <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden border border-gray-300 relative shadow-inner">
+                            <div id="monster-hp-bar" class="hp-fill h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full w-full"></div>
+                        </div>
+                        <div class="text-[11px] text-right text-gray-600 mt-1 font-mono font-bold">
+                            <span id="monster-hp-text">100</span> / <span id="monster-max-hp-text">100</span> HP
+                        </div>
+                    </div>
+
+                    <!-- Monster SVG Graphic Container -->
+                    <div id="monster-avatar" class="relative animate-monster-idle transition-all duration-300" style="animation-delay: -1.5s;">
+                        <div class="w-32 h-32 sm:w-40 sm:h-40 relative flex items-center justify-center">
+                            <div id="monster-svg-container" class="w-full h-full"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Control Panel & Log -->
+            <div class="bg-white/85 rounded-2xl p-4 shadow-inner border border-white mt-2">
+                <div class="text-center mb-3">
+                    <p id="battle-message" class="text-sm sm:text-base font-semibold text-gray-700 min-h-[44px] flex items-center justify-center px-2 bg-pink-50/60 rounded-xl border border-pink-100">
+                        เตรียมตัวให้พร้อม! กดปุ่ม <span class="text-pink-600 font-bold mx-1">"โจมตีด้วยปัญญา"</span> เพื่อตอบคำถามต่อสู้
+                    </p>
+                </div>
+
+                <div class="flex flex-col sm:flex-row justify-center gap-3">
+                    <button id="btn-attack" onclick="openQuestionModal()" class="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-extrabold font-kanit text-lg rounded-2xl shadow-lg hover:shadow-pink-300/50 transform hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center space-x-2 border-b-4 border-purple-800">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>โจมตีด้วยปัญญา!</span>
+                    </button>
+
+                    <!-- Emergency Healing Quest Button (Appears < 30% HP) -->
+                    <button id="btn-emergency-heal" onclick="startEmergencyQuest()" class="hidden w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 hover:from-amber-500 hover:to-red-600 text-white font-extrabold font-kanit text-lg rounded-2xl shadow-lg animate-bounce flex items-center justify-center space-x-2 border-b-4 border-red-800">
+                        <i class="fa-solid fa-kit-medical text-yellow-100"></i>
+                        <span>ภารกิจฟื้นฟูฉุกเฉิน! (+40% HP)</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Question Modal -->
+    <div id="modal-question" class="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border-4 border-pink-200 transform transition-all scale-95 opacity-0 relative" id="modal-q-box">
+            
+            <!-- Close Button (X) -->
+            <button onclick="closeQuestionModal()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-gray-100 hover:bg-pink-100 text-gray-500 hover:text-pink-600 flex items-center justify-center transition font-bold shadow-sm" title="ปิดหน้าต่างคำถาม">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+
+            <div class="flex justify-between items-center mb-4 pb-2 border-b border-pink-100 pr-8">
+                <span class="bg-pink-100 text-pink-700 text-xs font-bold px-3 py-1 rounded-full font-kanit flex items-center gap-1">
+                    <i class="fa-solid fa-brain"></i> <span id="q-type-badge">คำถามโจมตี</span>
+                </span>
+                <span id="question-category" class="text-xs text-purple-700 font-semibold bg-purple-100 px-3 py-1 rounded-lg">
+                    ตัวแปรสุ่ม
+                </span>
+            </div>
+
+            <!-- Question Text -->
+            <div class="my-4 min-h-[70px] flex items-center justify-center">
+                <h3 id="question-title" class="text-base sm:text-lg font-bold text-gray-800 leading-relaxed text-center">
+                    โจทย์คำถามกำลังโหลด...
+                </h3>
+            </div>
+
+            <!-- Choices Grid -->
+            <div id="question-choices" class="grid grid-cols-1 sm:grid-cols-2 gap-3 my-4">
+                <!-- Dynamic Choices -->
+            </div>
+
+            <div class="text-center text-xs text-gray-400 mt-2">
+                💡 ตอบถูกต้องเพื่อโจมตีมอนสเตอร์! หากยังไม่แน่ใจสามารถกดปิด (✕) เพื่อพักคิดได้
+            </div>
+        </div>
+    </div>
+
+    <!-- Enhanced Solution Modal with Distinct Colors -->
+    <div id="modal-solution" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border-4 border-indigo-200 transform transition-all">
+            <div class="text-center mb-3">
+                <span id="sol-badge" class="px-3.5 py-1 rounded-full text-xs font-extrabold font-kanit">
+                    💡 เฉลยและวิธีทำ
+                </span>
+                <h3 id="sol-title" class="text-lg font-bold font-kanit text-gray-800 mt-2">รายละเอียดเฉลย</h3>
+            </div>
+
+            <div id="sol-status-card" class="rounded-2xl p-4 border-2 mb-4 text-sm leading-relaxed space-y-2.5 transition-all">
+                <div class="flex items-start gap-2">
+                    <span id="sol-icon" class="text-xl">✔️</span>
+                    <div>
+                        <span class="font-extrabold block text-xs uppercase tracking-wider opacity-80" id="sol-user-label">ผลการตอบของคุณ</span>
+                        <span id="sol-user-ans" class="font-bold text-base block mt-0.5"></span>
+                    </div>
+                </div>
+                
+                <div id="sol-correct-box" class="pt-2 border-t border-black/10 hidden">
+                    <span class="font-bold text-emerald-800 text-xs block">คำตอบที่ถูกต้องคือ:</span>
+                    <span id="sol-correct-text" class="font-bold text-emerald-700 text-base block mt-0.5"></span>
+                </div>
+
+                <hr class="border-black/10 my-2">
+                
+                <div>
+                    <span class="font-bold text-gray-800 text-xs block mb-1">📌 อธิบายวิธีคิด:</span>
+                    <p id="sol-explanation-text" class="text-gray-700 text-xs sm:text-sm font-medium leading-relaxed"></p>
+                </div>
+            </div>
+
+            <button onclick="closeSolutionModal()" class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold font-kanit rounded-2xl shadow-md border-b-4 border-indigo-900">
+                เข้าสู่เทิร์นถัดไป ➔
+            </button>
+        </div>
+    </div>
+
+    <!-- Emergency Quest Modal -->
+    <div id="modal-emergency" class="fixed inset-0 bg-slate-900/75 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-gradient-to-b from-white to-amber-50 rounded-3xl p-6 max-w-md w-full shadow-2xl border-4 border-amber-400 relative">
+            
+            <div class="text-center mb-3">
+                <span class="bg-red-500 text-white font-extrabold text-xs px-3 py-1 rounded-full uppercase tracking-wider animate-pulse inline-block">
+                    🚨 ภารกิจฉุกเฉินฟื้นฟูเลือด! 🚨
+                </span>
+                <h2 class="text-xl font-bold font-kanit text-amber-900 mt-2">จำแนกตัวแปรสุ่ม 3 ข้อ</h2>
+                <p class="text-xs text-amber-700">ตอบให้ถูกต้องก่อนเวลาหมดเพื่อรับ +40% HP!</p>
+            </div>
+
+            <!-- Timer & Progress -->
+            <div class="flex justify-between items-center mb-4 bg-amber-100/90 p-3 rounded-2xl border border-amber-200">
+                <div class="text-xs font-bold text-amber-900">
+                    ข้อที่: <span id="em-quest-step" class="text-lg text-pink-600 font-extrabold">1</span> / 3
+                </div>
+                <div class="flex items-center space-x-1.5 bg-red-100 px-3 py-1 rounded-full border border-red-300">
+                    <i class="fa-solid fa-stopwatch text-red-500 animate-spin"></i>
+                    <span id="em-timer-text" class="font-mono font-extrabold text-red-600 text-lg">20</span>
+                    <span class="text-xs text-red-500 font-bold">วินาที</span>
+                </div>
+            </div>
+
+            <!-- Emergency Scenario Card -->
+            <div class="bg-white p-4 rounded-2xl border-2 border-amber-200 shadow-inner mb-4 min-h-[95px] flex items-center justify-center">
+                <p id="em-scenario-text" class="font-bold text-center text-gray-800 text-sm sm:text-base leading-relaxed">
+                    สถานการณ์ตัวอย่าง...
+                </p>
+            </div>
+
+            <!-- Choice Buttons -->
+            <div class="grid grid-cols-2 gap-3 mb-2">
+                <button onclick="submitEmergencyAnswer('discrete')" class="p-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold rounded-2xl text-sm shadow-md transition transform active:scale-95 flex flex-col items-center">
+                    <span>🎲 ตัวแปรสุ่มไม่ต่อเนื่อง</span>
+                    <span class="text-[10px] opacity-80 font-normal">(Discrete)</span>
+                </button>
+                <button onclick="submitEmergencyAnswer('continuous')" class="p-3.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold rounded-2xl text-sm shadow-md transition transform active:scale-95 flex flex-col items-center">
+                    <span>📏 ตัวแปรสุ่มต่อเนื่อง</span>
+                    <span class="text-[10px] opacity-80 font-normal">(Continuous)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Result Victory/Defeat Modal -->
+    <div id="modal-result" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border-4 border-purple-300">
+            <div id="result-icon-box" class="text-6xl mb-3">🎉</div>
+            <h2 id="result-title" class="text-2xl font-extrabold font-kanit text-gray-800 mb-2">ชัยชนะ!</h2>
+            <p id="result-desc" class="text-sm text-gray-600 mb-6">คุณสามารถปราบมอนสเตอร์ได้สำเร็จ!</p>
+            <button id="btn-result-action" onclick="handleResultAction()" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold font-kanit text-lg rounded-2xl shadow-lg border-b-4 border-purple-800">
+                ไปยังด่านถัดไป ➔
+            </button>
+        </div>
+    </div>
+
+    <!-- JavaScript Game Engine & Logic -->
+    <script>
+        /* Web Audio API Sound & BGM Synthesizer */
+        let audioCtx = null;
+        let isSoundEnabled = true;
+        let isBGMEnabled = false; // Off by default until user enables/interacts
+        let bgmInterval = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function toggleSound() {
+            isSoundEnabled = !isSoundEnabled;
+            const btn = document.getElementById('sound-icon');
+            if (isSoundEnabled) {
+                btn.className = "fa-solid fa-volume-high text-base text-pink-600";
+            } else {
+                btn.className = "fa-solid fa-volume-xmark text-base text-gray-400";
+            }
+        }
+
+        function toggleBGM() {
+            initAudio();
+            isBGMEnabled = !isBGMEnabled;
+            const btn = document.getElementById('bgm-icon');
+            
+            if (isBGMEnabled) {
+                btn.className = "fa-solid fa-music text-base text-purple-600 animate-bounce";
+                startBGMLoop();
+            } else {
+                btn.className = "fa-solid fa-slash-music text-base text-gray-400";
+                stopBGMLoop();
+            }
+        }
+
+        function startBGMLoop() {
+            if (bgmInterval) clearInterval(bgmInterval);
+            
+            // Subtle 8-bit / Chiptune RPG Arpeggio Loop
+            const notes = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63, 293.66, 349.23, 440.00, 523.25, 440.00, 349.23];
+            let noteIdx = 0;
+
+            bgmInterval = setInterval(() => {
+                if (!isBGMEnabled || !audioCtx) return;
+                
+                try {
+                    const now = audioCtx.currentTime;
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(notes[noteIdx], now);
+
+                    // Gentle soft background volume
+                    gain.gain.setValueAtTime(0.025, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+
+                    osc.start(now);
+                    osc.stop(now + 0.22);
+
+                    noteIdx = (noteIdx + 1) % notes.length;
+                } catch(e) {}
+            }, 230);
+        }
+
+        function stopBGMLoop() {
+            if (bgmInterval) {
+                clearInterval(bgmInterval);
+                bgmInterval = null;
+            }
+        }
+
+        function playSound(type) {
+            if (!isSoundEnabled) return;
+            initAudio();
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'slash') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'hit') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.2);
+                gain.gain.setValueAtTime(0.35, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'correct') {
+                // Bright Success Chime
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+                    gain.gain.setValueAtTime(0.25, now + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.08);
+                    osc.stop(now + idx * 0.08 + 0.25);
+                });
+            } else if (type === 'wrong') {
+                // Wrong Answer Tone (Buzz/Boing)
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.setValueAtTime(140, now + 0.12);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'heal') {
+                [300, 450, 600, 750, 900].forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+                    gain.gain.setValueAtTime(0.2, now + idx * 0.07);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.07 + 0.2);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.07);
+                    osc.stop(now + idx * 0.07 + 0.2);
+                });
+            } else if (type === 'victory') {
+                [440, 554.37, 659.25, 880].forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+                    gain.gain.setValueAtTime(0.3, now + idx * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.12 + 0.4);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.12);
+                    osc.stop(now + idx * 0.12 + 0.4);
+                });
+            } else if (type === 'defeat') {
+                [300, 260, 220, 180].forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.15);
+                    gain.gain.setValueAtTime(0.25, now + idx * 0.15);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.15 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.15);
+                    osc.stop(now + idx * 0.15 + 0.3);
+                });
+            }
+        }
+
+        const gameState = {
+            stage: 1,
+            score: 0,
+            hero: {
+                hp: 100,
+                maxHp: 100,
+                level: 1,
+                atk: 35
+            },
+            monster: {
+                name: 'สไลม์ทฤษฎี',
+                hp: 100,
+                maxHp: 100,
+                atk: 10,
+                type: 'slime'
+            },
+            currentQuestion: null,
+            lastQuestionResult: false,
+            lastUserAnswer: '',
+            isEmergencyUsedThisStage: false,
+            emergencyState: {
+                step: 0,
+                correctCount: 0,
+                questions: [],
+                timer: null,
+                timeLeft: 20
+            },
+            usedQuestionIds: new Set()
+        };
+
+        const monsterSVGs = {
+            slime: `<svg viewBox="0 0 200 200" class="w-full h-full drop-shadow-xl">
+                <path d="M 40,130 C 30,70 70,35 100,35 C 130,35 170,70 160,130 C 160,175 140,180 100,180 C 60,180 40,175 40,130 Z" fill="#9D4EDD" />
+                <path d="M 55,120 C 55,75 80,50 100,50 C 110,50 140,75 145,120 Z" fill="#C77DFF" opacity="0.6"/>
+                <circle cx="78" cy="95" r="11" fill="#FFFFFF" />
+                <circle cx="122" cy="95" r="11" fill="#FFFFFF" />
+                <circle cx="80" cy="97" r="6" fill="#240046" />
+                <circle cx="120" cy="97" r="6" fill="#240046" />
+                <circle cx="76" cy="93" r="2.5" fill="#FFFFFF" />
+                <circle cx="116" cy="93" r="2.5" fill="#FFFFFF" />
+                <path d="M 88,118 Q 100,130 112,118" stroke="#240046" stroke-width="4" fill="none" stroke-linecap="round"/>
+                <polygon points="60,40 45,15 75,30" fill="#FFD166" />
+                <polygon points="140,40 155,15 125,30" fill="#FFD166" />
+            </svg>`,
+
+            dragon: `<svg viewBox="0 0 200 200" class="w-full h-full drop-shadow-xl">
+                <path d="M 50,110 Q 30,160 50,180 Q 100,195 150,180 Q 170,160 150,110 Z" fill="#FF5252" />
+                <circle cx="100" cy="90" r="50" fill="#FF7979" />
+                <path d="M 40,80 Q 0,40 30,20 Q 55,50 50,85 Z" fill="#D63031" />
+                <path d="M 160,80 Q 200,40 170,20 Q 145,50 150,85 Z" fill="#D63031" />
+                <circle cx="80" cy="85" r="10" fill="#FFFFFF" />
+                <circle cx="120" cy="85" r="10" fill="#FFFFFF" />
+                <circle cx="82" cy="87" r="5" fill="#2D3436" />
+                <circle cx="118" cy="87" r="5" fill="#2D3436" />
+                <ellipse cx="100" cy="100" rx="18" ry="12" fill="#FFD2D2" />
+                <circle cx="94" cy="98" r="2" fill="#D63031" />
+                <circle cx="106" cy="98" r="2" fill="#D63031" />
+                <path d="M 70,45 Q 60,20 75,15 Q 82,30 80,48 Z" fill="#FFD166" />
+                <path d="M 130,45 Q 140,20 125,15 Q 118,30 120,48 Z" fill="#FFD166" />
+            </svg>`,
+
+            ghost: `<svg viewBox="0 0 200 200" class="w-full h-full drop-shadow-xl">
+                <path d="M 50,110 C 50,45 150,45 150,110 C 150,155 138,175 125,162 C 115,150 105,172 100,160 C 95,148 85,172 75,162 C 60,175 50,155 50,110 Z" fill="#4EA8DE" />
+                <circle cx="80" cy="90" r="11" fill="#FFFFFF" />
+                <circle cx="120" cy="90" r="11" fill="#FFFFFF" />
+                <circle cx="82" cy="92" r="6" fill="#184E77" />
+                <circle cx="118" cy="92" r="6" fill="#184E77" />
+                <circle cx="70" cy="104" r="6" fill="#F72585" opacity="0.4"/>
+                <circle cx="130" cy="104" r="6" fill="#F72585" opacity="0.4"/>
+                <path d="M 92,108 Q 100,118 108,108" stroke="#184E77" stroke-width="3" fill="none" stroke-linecap="round"/>
+            </svg>`
+        };
+
+        const monsterList = [
+            { name: 'สไลม์ตัวแปรสุ่ม', type: 'slime', baseHp: 100, baseAtk: 10 },
+            { name: 'มังกรน้อยความน่าจะเป็น', type: 'dragon', baseHp: 125, baseAtk: 12 },
+            { name: 'ผีน้อยแจกแจงดิสครีต', type: 'ghost', baseHp: 150, baseAtk: 15 }
+        ];
+
+        /* Dynamic Calculations Bank (Strictly Discrete Variables for Math M.6) */
+        function generateDiscreteCalculationQuestion() {
+            const mode = Math.floor(Math.random() * 4);
+            const id = 'calc_' + Date.now() + '_' + Math.random();
+
+            if (mode === 0) {
+                // Sum P(X=x) = 1
+                const p1 = (Math.floor(Math.random() * 3) + 1) / 10; // 0.1 .. 0.3
+                const p2 = (Math.floor(Math.random() * 3) + 1) / 10; // 0.1 .. 0.3
+                const p3 = (Math.floor(Math.random() * 2) + 1) / 10; // 0.1 .. 0.2
+                const correctP = parseFloat((1 - (p1 + p2 + p3)).toFixed(1));
+
+                return {
+                    id: id,
+                    category: 'สมบัติ ∑P(X) = 1 (ม.6)',
+                    title: `กำหนดให้ X เป็นตัวแปรสุ่มไม่ต่อเนื่อง มีค่าเป็น 1, 2, 3, 4 โดยที่ P(X=1) = ${p1}, P(X=2) = ${p2}, P(X=3) = ${p3} จงหาค่าของ P(X=4)`,
+                    choices: [`${correctP}`, `${parseFloat((correctP + 0.1).toFixed(1))}`, '0.5', '0.0'],
+                    correctAnswer: `${correctP}`,
+                    explanation: `เนื่องจากผลรวมของความน่าจะเป็นทั้งหมดของตัวแปรสุ่มไม่ต่อเนื่องต้องเท่ากับ 1 (∑ P(X=x) = 1)\nดังนั้น P(X=4) = 1 - (${p1} + ${p2} + ${p3}) = 1 - ${parseFloat((p1+p2+p3).toFixed(1))} = ${correctP}`
+                };
+            } else if (mode === 1) {
+                // Fair Coins P(X = k)
+                const coins = 3;
+                return {
+                    id: id,
+                    category: 'ความน่าจะเป็นตัวแปรสุ่มไม่ต่อเนื่อง',
+                    title: `โยนเหรียญเที่ยงตรง 3 เหรียญพร้อมกัน ให้ X แทน "จำนวนเหรียญที่ขึ้นหัว" จงหาความน่าจะเป็น P(X = 2)`,
+                    choices: ['3/8', '1/8', '4/8 (หรือ 1/2)', '2/8 (หรือ 1/4)'],
+                    correctAnswer: '3/8',
+                    explanation: 'ผลลัพธ์ทั้งหมดมี 2³ = 8 กรณี คือ {HHH, HHT, HTH, THH, HTT, THT, TTH, TTT}\nเหตุการณ์ที่ขึ้นหัว 2 เหรียญ (X=2) มี 3 กรณีคือ {HHT, HTH, THH}\nดังนั้น P(X = 2) = 3/8'
+                };
+            } else if (mode === 2) {
+                // Dice sum probability
+                return {
+                    id: id,
+                    category: 'ความน่าจะเป็นตัวแปรสุ่มไม่ต่อเนื่อง',
+                    title: `ทอดลูกเต๋าเที่ยงตรง 1 ลูก 1 ครั้ง ให้ X แทน "แต้มที่ได้บนหน้าลูกเต๋า" จงหาความน่าจะเป็นที่ P(X เป็นจำนวนคู่)`,
+                    choices: ['3/6 (หรือ 1/2)', '2/6 (หรือ 1/3)', '1/6', '4/6'],
+                    correctAnswer: '3/6 (หรือ 1/2)',
+                    explanation: 'แต้มที่เป็นไปได้บนหน้าลูกเต๋า X ∈ {1, 2, 3, 4, 5, 6} รวม 6 กรณี\nแต้มที่เป็นจำนวนคู่คือ {2, 4, 6} รวม 3 กรณี\nดังนั้น P(X เป็นจำนวนคู่) = 3/6 = 1/2'
+                };
+            } else {
+                // Simple Marble Draw P(X <= 1)
+                const redBalls = 2;
+                const blueBalls = 3;
+                const total = redBalls + blueBalls;
+                return {
+                    id: id,
+                    category: 'ความน่าจะเป็นตัวแปรสุ่มไม่ต่อเนื่อง',
+                    title: `กล่องใบหนึ่งมีลูกบอลสีแดง ${redBalls} ลูก และสีฟ้า ${blueBalls} ลูก สุ่มหยิบลูกบอล 1 ลูก ให้ X แทน "จำนวนลูกบอลสีแดงที่สุ่มได้" จงหา P(X = 1)`,
+                    choices: ['2/5', '3/5', '1/5', '4/5'],
+                    correctAnswer: '2/5',
+                    explanation: 'ลูกบอลทั้งหมดมี 2 + 3 = 5 ลูก\nความน่าจะเป็นที่จะหยิบได้สีแดง 1 ลูก (X=1) คือ จำนวนลูกบอลสีแดง / ลูกบอลทั้งหมด = 2/5'
+                };
+            }
+        }
+
+        /* Static Curriculum Question Bank (Pure M.6 Probability Random Variables) */
+        const staticQuestionBank = [
+            {
+                id: 'm6_q1',
+                category: 'จำแนกประเภทตัวแปรสุ่ม',
+                title: 'ข้อใดต่อไปนี้จัดเป็น "ตัวแปรสุ่มไม่ต่อเนื่อง" (Discrete Random Variable)?',
+                choices: [
+                    'จำนวนนักเรียนที่สอบผ่านวิชาคณิตศาสตร์',
+                    'น้ำหนักของนักเรียนชั้น ม.6 ในโรงเรียน',
+                    'เวลาที่ใช้ในการวิ่งระยะทาง 100 เมตร',
+                    'ความสูงของต้นไม้ในแปลงเกษตร'
+                ],
+                correctAnswer: 'จำนวนนักเรียนที่สอบผ่านวิชาคณิตศาสตร์',
+                explanation: 'จำนวนนักเรียนเป็นค่าที่เกิดจากการนับ (Counting) มีค่าเป็นจำนวนเต็ม {0, 1, 2, ...} จึงเป็นตัวแปรสุ่มไม่ต่อเนื่อง'
+            },
+            {
+                id: 'm6_q2',
+                category: 'จำแนกประเภทตัวแปรสุ่ม',
+                title: 'ข้อใดต่อไปนี้จัดเป็น "ตัวแปรสุ่มต่อเนื่อง" (Continuous Random Variable)?',
+                choices: [
+                    'ปริมาณน้ำส้มในบรรจุภัณฑ์ขวด (มิลลิลิตร)',
+                    'จำนวนเหรียญในกระปุกออมสิน',
+                    'จำนวนประตูที่ยิงได้ในการแข่งขันฟุตบอล',
+                    'จำนวนอุบัติเหตุทางรถยนต์ในแต่ละวัน'
+                ],
+                correctAnswer: 'ปริมาณน้ำส้มในบรรจุภัณฑ์ขวด (มิลลิลิตร)',
+                explanation: 'ปริมาณน้ำส้มเกิดจากการวัด (Measurement) สามารถมีค่าเป็นจำนวนจริงทศนิยมต่อเนื่องในช่วงหนึ่งๆ ได้ จึงเป็นตัวแปรสุ่มต่อเนื่อง'
+            },
+            {
+                id: 'm6_q3',
+                category: 'จำแนกประเภทตัวแปรสุ่ม',
+                title: 'การทอดลูกเต๋า 2 ลูกพร้อมกัน แล้วให้ X แทน "ผลรวมของแต้มที่ได้" X จัดเป็นตัวแปรสุ่มชนิดใด?',
+                choices: [
+                    'ตัวแปรสุ่มไม่ต่อเนื่อง',
+                    'ตัวแปรสุ่มต่อเนื่อง',
+                    'ตัวแปรเชิงคุณภาพ',
+                    'ไม่เป็นตัวแปรสุ่ม'
+                ],
+                correctAnswer: 'ตัวแปรสุ่มไม่ต่อเนื่อง',
+                explanation: 'ผลรวมของแต้มลูกเต๋า 2 ลูก มีค่าที่เป็นไปได้คือ {2, 3, 4, 5, ..., 12} ซึ่งเป็นเซตของจำนวนเต็มที่นับได้แน่นอน'
+            },
+            {
+                id: 'm6_q4',
+                category: 'สมบัติความน่าจะเป็น ม.6',
+                title: 'ถ้า X เป็นตัวแปรสุ่มไม่ต่อเนื่อง ข้อใดกล่าวถูกต้องเกี่ยวกับค่าความน่าจะเป็น P(X = x)?',
+                choices: [
+                    '0 ≤ P(X = x) ≤ 1 และ ผลรวม ∑ P(X = x) = 1',
+                    'P(X = x) สามารถติดลบได้ในบางกรณี',
+                    'ผลรวมของ P(X = x) ทุกค่ารวมกันต้องมากกว่า 1',
+                    'P(X = x) ต้องเท่ากับ 0.5 เสมอ'
+                ],
+                correctAnswer: '0 ≤ P(X = x) ≤ 1 และ ผลรวม ∑ P(X = x) = 1',
+                explanation: 'สมบัติของฟังก์ชันความน่าจะเป็นของตัวแปรสุ่มไม่ต่อเนื่องคือ ค่าความน่าจะเป็นแต่ละค่าต้องอยู่ระหว่าง 0 ถึง 1 และผลรวมของทุกค่าต้องเท่ากับ 1 พอดี'
+            },
+            {
+                id: 'm6_q5',
+                category: 'ความน่าจะเป็นตัวแปรสุ่มต่อเนื่อง',
+                title: 'สำหรับตัวแปรสุ่มต่อเนื่อง X ค่าของความน่าจะเป็น ณ จุดใดจุดหนึ่งพอดี P(X = a) มีค่าเท่ากับเท่าใด?',
+                choices: [
+                    'เท่ากับ 0 เสมอ',
+                    'เท่ากับ 1 เสมอ',
+                    'ขึ้นอยู่กับค่าของ a',
+                    'เท่ากับ 0.5'
+                ],
+                correctAnswer: 'เท่ากับ 0 เสมอ',
+                explanation: 'สำหรับตัวแปรสุ่มต่อเนื่อง ความน่าจะเป็นที่จะเกิดค่า ณ จุดใดจุดหนึ่งพอดี P(X = a) จะมีค่าเท่ากับ 0 เสมอ (เราจะคำนวณความน่าจะเป็นในช่วง เช่น P(a ≤ X ≤ b) จากพื้นที่ใต้เส้นโค้ง)'
+            },
+            {
+                id: 'm6_q6',
+                category: 'จำแนกประเภทตัวแปรสุ่ม',
+                title: 'อุณหภูมิของห้องเรียนในแต่ละชั่วโมง (องศาเซลเซียส) จัดเป็นตัวแปรสุ่มชนิดใด?',
+                choices: [
+                    'ตัวแปรสุ่มต่อเนื่อง',
+                    'ตัวแปรสุ่มไม่ต่อเนื่อง',
+                    'ตัวแปรเชิงคุณภาพ',
+                    'ไม่ใช่ตัวแปรสุ่ม'
+                ],
+                correctAnswer: 'ตัวแปรสุ่มต่อเนื่อง',
+                explanation: 'อุณหภูมิเป็นปริมาณที่ได้จากการวัด ซึ่งเป็นจำนวนจริงทศนิยมต่อเนื่องได้ ไม่จำกัดเฉพาะจำนวนเต็ม'
+            },
+            {
+                id: 'm6_q7',
+                category: 'จำแนกประเภทตัวแปรสุ่ม',
+                title: 'จำนวนโทรศัพท์ที่โทรเข้ามายังศูนย์รับแจ้งเหตุในเวลา 1 ชั่วโมง เป็นตัวแปรสุ่มชนิดใด?',
+                choices: [
+                    'ตัวแปรสุ่มไม่ต่อเนื่อง',
+                    'ตัวแปรสุ่มต่อเนื่อง',
+                    'ตัวแปรเชิงคุณภาพ',
+                    'ไม่สามารถระบุได้'
+                ],
+                correctAnswer: 'ตัวแปรสุ่มไม่ต่อเนื่อง',
+                explanation: 'จำนวนสายที่โทรเข้าเกิดจากการนับ มีค่าเป็นจำนวนเต็ม {0, 1, 2, 3, ...} จึงเป็นตัวแปรสุ่มไม่ต่อเนื่อง'
+            },
+            {
+                id: 'm6_q8',
+                category: 'จำแนกประเภทตัวแปรสุ่ม',
+                title: 'เวลาที่ใช้วิ่งออกกำลังกายของนักเรียนใน 1 วัน (นาที) จัดเป็นตัวแปรสุ่มชนิดใด?',
+                choices: [
+                    'ตัวแปรสุ่มต่อเนื่อง',
+                    'ตัวแปรสุ่มไม่ต่อเนื่อง',
+                    'ตัวแปรเชิงคุณภาพ',
+                    'ไม่จัดเป็นตัวแปรสุ่ม'
+                ],
+                correctAnswer: 'ตัวแปรสุ่มต่อเนื่อง',
+                explanation: 'เวลาเป็นปริมาณที่เกิดจากการวัด สามารถนับละเอียดเป็นวินาที ทศนิยมของวินาทีได้อย่างต่อเนื่อง'
+            }
+        ];
+
+        /* Emergency Bonus Scenarios Bank */
+        const emergencyScenarioBank = [
+            { text: "จำนวนลูกค้าที่เข้ามาใช้บริการในร้านกาแฟระหว่างเวลา 09:00 - 10:00 น.", type: "discrete" },
+            { text: "น้ำหนักของเด็กแรกเกิดในโรงพยาบาลแห่งหนึ่ง (กิโลกรัม)", type: "continuous" },
+            { text: "เวลาที่ใช้วิ่งแข่งระยะทาง 100 เมตร (วินาที)", type: "continuous" },
+            { text: "จำนวนข้อสอบที่นักเรียนทำถูกต้องจากทั้งหมด 20 ข้อ", type: "discrete" },
+            { text: "ปริมาณน้ำฝนที่ตกลงมาในเขตกรุงเทพฯ ในรอบวัน (มิลลิเมตร)", type: "continuous" },
+            { text: "จำนวนอุบัติเหตุทางรถยนต์ที่เกิดขึ้นบนถนนสายหลักในวันสงกรานต์", type: "discrete" },
+            { text: "ความสูงของต้นไม้ในสวน (เซนติเมตร)", type: "continuous" },
+            { text: "จำนวนครั้งที่เหรียญขึ้นหัวจากการโยนเหรียญ 10 ครั้ง", type: "discrete" },
+            { text: "อุณหภูมิเฉลี่ยของห้องเรียนในแต่ละชั่วโมง (องศาเซลเซียส)", type: "continuous" },
+            { text: "จำนวนโทรศัพท์ที่โทรเข้ามายังศูนย์รับแจ้งเหตุใน 1 ชั่วโมง", type: "discrete" }
+        ];
+
+        window.onload = function() {
+            initStage();
+        };
+
+        function initStage() {
+            const currentMonsterData = monsterList[(gameState.stage - 1) % monsterList.length];
+            
+            gameState.monster.name = `${currentMonsterData.name} (ด่าน ${gameState.stage})`;
+            gameState.monster.maxHp = currentMonsterData.baseHp + (gameState.stage - 1) * 30;
+            gameState.monster.hp = gameState.monster.maxHp;
+            gameState.monster.atk = currentMonsterData.baseAtk + (gameState.stage - 1) * 2;
+            gameState.monster.type = currentMonsterData.type;
+
+            gameState.hero.hp = gameState.hero.maxHp;
+            gameState.isEmergencyUsedThisStage = false;
+
+            updateUI();
+            
+            document.getElementById('monster-svg-container').innerHTML = monsterSVGs[gameState.monster.type];
+            document.getElementById('monster-name').innerText = gameState.monster.name;
+            
+            setBattleMessage(`⚔️ เริ่มต้นด่านที่ ${gameState.stage}! เผชิญหน้ากับ ${gameState.monster.name}`);
+        }
+
+        function updateUI() {
+            // Player HP
+            const heroHpPct = Math.max(0, (gameState.hero.hp / gameState.hero.maxHp) * 100);
+            const heroHpBar = document.getElementById('hero-hp-bar');
+            heroHpBar.style.width = `${heroHpPct}%`;
+            document.getElementById('hero-hp-text').innerText = Math.round(gameState.hero.hp);
+            document.getElementById('hero-max-hp-text').innerText = gameState.hero.maxHp;
+
+            const heroStatusTag = document.getElementById('hero-status-tag');
+
+            if (heroHpPct < 30) {
+                heroHpBar.className = "hp-fill h-full bg-gradient-to-r from-red-500 to-rose-600 rounded-full animate-pulse";
+                heroStatusTag.innerText = "🚨 วิกฤต!";
+                heroStatusTag.className = "text-[10px] text-red-600 font-bold animate-pulse";
+            } else {
+                heroHpBar.className = "hp-fill h-full bg-gradient-to-r from-emerald-400 to-green-500 rounded-full";
+                heroStatusTag.innerText = "พร้อมสู้!";
+                heroStatusTag.className = "text-[10px] text-emerald-600";
+            }
+
+            // Monster HP
+            const monsterHpPct = Math.max(0, (gameState.monster.hp / gameState.monster.maxHp) * 100);
+            document.getElementById('monster-hp-bar').style.width = `${monsterHpPct}%`;
+            document.getElementById('monster-hp-text').innerText = Math.round(gameState.monster.hp);
+            document.getElementById('monster-max-hp-text').innerText = gameState.monster.maxHp;
+
+            // Stats UI
+            document.getElementById('stage-num').innerText = gameState.stage;
+            document.getElementById('score-text').innerText = gameState.score;
+            document.getElementById('hero-level').innerText = gameState.stage;
+
+            // Emergency Healing Quest Trigger (< 30% HP)
+            const btnEmergency = document.getElementById('btn-emergency-heal');
+            if (heroHpPct <= 30 && !gameState.isEmergencyUsedThisStage && gameState.hero.hp > 0) {
+                btnEmergency.classList.remove('hidden');
+            } else {
+                btnEmergency.classList.add('hidden');
+            }
+        }
+
+        function setBattleMessage(msg) {
+            document.getElementById('battle-message').innerHTML = msg;
+        }
+
+        function createVisualFX(targetId, type, text = '', isCrit = false) {
+            const targetEl = document.getElementById(targetId);
+            const rect = targetEl.getBoundingClientRect();
+            const container = document.getElementById('fx-layer');
+
+            if (type === 'damage' || type === 'miss') {
+                const popup = document.createElement('div');
+                popup.className = 'damage-popup absolute font-extrabold font-kanit text-2xl z-40 drop-shadow-lg';
+                
+                if (type === 'miss') {
+                    popup.innerText = 'MISS!';
+                    popup.classList.add('text-gray-400', 'text-xl');
+                } else if (isCrit) {
+                    popup.innerText = `CRITICAL! -${text}`;
+                    popup.classList.add('text-yellow-300', 'text-3xl', 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]');
+                } else {
+                    popup.innerText = `-${text}`;
+                    popup.classList.add('text-red-500');
+                }
+
+                popup.style.left = `${rect.left + rect.width / 2 - 35}px`;
+                popup.style.top = `${rect.top + 20}px`;
+                container.appendChild(popup);
+                setTimeout(() => popup.remove(), 1200);
+
+            } else if (type === 'slash') {
+                const slash = document.createElement('div');
+                slash.className = 'slash-fx';
+                slash.style.left = `${rect.left + rect.width / 2 - 60}px`;
+                slash.style.top = `${rect.top + rect.height / 2 - 60}px`;
+                container.appendChild(slash);
+                setTimeout(() => slash.remove(), 450);
+
+            } else if (type === 'heal') {
+                const heal = document.createElement('div');
+                heal.className = 'heal-fx';
+                heal.style.left = `${rect.left + rect.width / 2 - 70}px`;
+                heal.style.top = `${rect.top + rect.height / 2 - 70}px`;
+                container.appendChild(heal);
+
+                const popup = document.createElement('div');
+                popup.className = 'damage-popup absolute font-extrabold font-kanit text-2xl text-emerald-500 z-40 drop-shadow-md';
+                popup.innerText = `+${text} HP`;
+                popup.style.left = `${rect.left + rect.width / 2 - 30}px`;
+                popup.style.top = `${rect.top + 10}px`;
+                container.appendChild(popup);
+
+                setTimeout(() => {
+                    heal.remove();
+                    popup.remove();
+                }, 1000);
+            }
+        }
+
+        function openQuestionModal() {
+            initAudio();
+
+            let qObj = null;
+
+            // 50% Chance for Discrete Calc, 50% Static Concept
+            if (Math.random() > 0.5) {
+                qObj = generateDiscreteCalculationQuestion();
+                document.getElementById('q-type-badge').innerText = 'คำนวณตัวแปรสุ่มไม่ต่อเนื่อง';
+            } else {
+                const unusedStatics = staticQuestionBank.filter(q => !gameState.usedQuestionIds.has(q.id));
+                if (unusedStatics.length > 0) {
+                    qObj = unusedStatics[Math.floor(Math.random() * unusedStatics.length)];
+                } else {
+                    qObj = staticQuestionBank[Math.floor(Math.random() * staticQuestionBank.length)];
+                }
+                document.getElementById('q-type-badge').innerText = 'ทฤษฎีตัวแปรสุ่ม ม.6';
+            }
+
+            gameState.usedQuestionIds.add(qObj.id);
+            gameState.currentQuestion = qObj;
+
+            document.getElementById('question-category').innerText = qObj.category;
+            document.getElementById('question-title').innerText = qObj.title;
+
+            const choicesContainer = document.getElementById('question-choices');
+            choicesContainer.innerHTML = '';
+
+            const rawChoices = qObj.choices;
+            const correctAnswerText = qObj.correctAnswer;
+            const shuffledChoices = [...rawChoices].sort(() => Math.random() - 0.5);
+
+            shuffledChoices.forEach((choiceText) => {
+                const btn = document.createElement('button');
+                btn.className = "p-3.5 bg-slate-50 hover:bg-pink-50 border-2 border-slate-200 hover:border-pink-400 rounded-2xl text-left text-xs sm:text-sm font-semibold text-gray-700 transition flex items-center justify-between group transform active:scale-98 shadow-sm";
+                btn.innerHTML = `
+                    <span class="leading-snug">${choiceText}</span>
+                    <i class="fa-solid fa-circle-check opacity-0 group-hover:opacity-100 text-pink-500 transition ml-2"></i>
+                `;
+                btn.onclick = () => submitAnswer(choiceText, choiceText === correctAnswerText);
+                choicesContainer.appendChild(btn);
+            });
+
+            const modal = document.getElementById('modal-question');
+            const box = document.getElementById('modal-q-box');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                box.classList.remove('scale-95', 'opacity-0');
+                box.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeQuestionModal() {
+            const modal = document.getElementById('modal-question');
+            const box = document.getElementById('modal-q-box');
+            box.classList.remove('scale-100', 'opacity-100');
+            box.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        function submitAnswer(userChoiceText, isCorrect) {
+            closeQuestionModal();
+            gameState.lastQuestionResult = isCorrect;
+            gameState.lastUserAnswer = userChoiceText;
+
+            // Play Immediate Correct/Wrong SFX Sound
+            if (isCorrect) {
+                playSound('correct');
+            } else {
+                playSound('wrong');
+            }
+
+            // Open Solution Modal to show explanation with bright colors
+            showSolutionModal(isCorrect);
+        }
+
+        function showSolutionModal(isCorrect) {
+            const badge = document.getElementById('sol-badge');
+            const title = document.getElementById('sol-title');
+            const card = document.getElementById('sol-status-card');
+            const icon = document.getElementById('sol-icon');
+            const userAnsText = document.getElementById('sol-user-ans');
+            const correctBox = document.getElementById('sol-correct-box');
+            
+            userAnsText.innerText = gameState.lastUserAnswer;
+
+            if (isCorrect) {
+                // Bright Green Highlight for Correct Answer
+                badge.className = "px-3.5 py-1 rounded-full text-xs font-extrabold font-kanit bg-emerald-100 text-emerald-800 border border-emerald-300";
+                badge.innerText = "✨ ตอบถูกต้อง! (SUCCESS)";
+                title.innerText = "การโจมตีสัมฤทธิ์ผล!";
+                
+                card.className = "rounded-2xl p-4 border-2 border-emerald-300 bg-emerald-50/90 text-sm leading-relaxed space-y-2.5 shadow-sm";
+                icon.innerText = "✔️";
+                document.getElementById('sol-user-label').className = "font-extrabold block text-xs uppercase tracking-wider text-emerald-800";
+                userAnsText.className = "font-extrabold text-emerald-900 text-base block mt-0.5";
+                
+                correctBox.classList.add('hidden');
+            } else {
+                // Bright Red Highlight for Incorrect Answer
+                badge.className = "px-3.5 py-1 rounded-full text-xs font-extrabold font-kanit bg-rose-100 text-rose-800 border border-rose-300";
+                badge.innerText = "❌ ตอบไม่ถูกต้อง (MISS)";
+                title.innerText = "การโจมตีผิดพลาด!";
+                
+                card.className = "rounded-2xl p-4 border-2 border-rose-300 bg-rose-50/90 text-sm leading-relaxed space-y-2.5 shadow-sm";
+                icon.innerText = "❌";
+                document.getElementById('sol-user-label').className = "font-extrabold block text-xs uppercase tracking-wider text-rose-800";
+                userAnsText.className = "font-extrabold text-rose-900 text-base block mt-0.5 line-through opacity-80";
+                
+                correctBox.classList.remove('hidden');
+                document.getElementById('sol-correct-text').innerText = gameState.currentQuestion.correctAnswer;
+            }
+
+            document.getElementById('sol-explanation-text').innerText = gameState.currentQuestion.explanation;
+            document.getElementById('modal-solution').classList.remove('hidden');
+        }
+
+        function closeSolutionModal() {
+            document.getElementById('modal-solution').classList.add('hidden');
+            executeTurnResult(gameState.lastQuestionResult);
+        }
+
+        function executeTurnResult(isCorrect) {
+            if (isCorrect) {
+                const damage = Math.floor(gameState.hero.atk * (1.3 + Math.random() * 0.4));
+                gameState.monster.hp = Math.max(0, gameState.monster.hp - damage);
+                gameState.score += 120;
+
+                const heroAvatar = document.getElementById('hero-avatar');
+                heroAvatar.classList.add('attack-player');
+                
+                setTimeout(() => {
+                    playSound('slash');
+                    createVisualFX('monster-avatar', 'slash');
+                }, 200);
+
+                setTimeout(() => {
+                    playSound('hit');
+                    const monsterAvatar = document.getElementById('monster-avatar');
+                    monsterAvatar.classList.add('animate-shake');
+                    document.getElementById('game-app').classList.add('animate-shake');
+                    createVisualFX('monster-avatar', 'damage', damage, true);
+
+                    setTimeout(() => {
+                        monsterAvatar.classList.remove('animate-shake');
+                        document.getElementById('game-app').classList.remove('animate-shake');
+                        heroAvatar.classList.remove('attack-player');
+                    }, 400);
+                }, 350);
+
+                setBattleMessage(`✨ <span class="text-emerald-600 font-bold">ตอบถูกต้อง!</span> โจมตีปล่อยเวทมนตร์ใส่ศัตรู <span class="text-pink-600 font-bold">${damage}</span> Damage!`);
+
+            } else {
+                createVisualFX('monster-avatar', 'miss');
+                setBattleMessage(`❌ <span class="text-red-500 font-bold">ตอบไม่ถูกต้อง!</span> โจมตีพลาด (MISS!) สลับเทิร์นให้ศัตรู`);
+            }
+
+            updateUI();
+
+            if (gameState.monster.hp <= 0) {
+                setTimeout(handleVictory, 1100);
+            } else {
+                setTimeout(monsterTurnAttack, 1200);
+            }
+        }
+
+        function monsterTurnAttack() {
+            if (gameState.monster.hp <= 0) return;
+
+            const monsterDmg = Math.floor(gameState.monster.atk * (0.8 + Math.random() * 0.3));
+            gameState.hero.hp = Math.max(0, gameState.hero.hp - monsterDmg);
+
+            const monsterAvatar = document.getElementById('monster-avatar');
+            monsterAvatar.classList.add('animate-attack-monster');
+            setTimeout(() => monsterAvatar.classList.remove('animate-attack-monster'), 600);
+
+            setTimeout(() => {
+                playSound('hit');
+                const heroAvatar = document.getElementById('hero-avatar');
+                heroAvatar.classList.add('animate-shake');
+                createVisualFX('hero-avatar', 'damage', monsterDmg);
+                setTimeout(() => heroAvatar.classList.remove('animate-shake'), 400);
+            }, 300);
+
+            setBattleMessage(`💥 ${gameState.monster.name} โจมตีสวนกลับ! ทำความเสียหาย <span class="text-red-600 font-bold">${monsterDmg}</span> HP`);
+            
+            updateUI();
+
+            if (gameState.hero.hp <= 0) {
+                setTimeout(handleDefeat, 1000);
+            }
+        }
+
+        function startEmergencyQuest() {
+            initAudio();
+            playSound('heal');
+
+            gameState.isEmergencyUsedThisStage = true;
+            updateUI();
+
+            const shuffled = [...emergencyScenarioBank].sort(() => 0.5 - Math.random());
+            gameState.emergencyState.questions = shuffled.slice(0, 3);
+            gameState.emergencyState.step = 0;
+            gameState.emergencyState.correctCount = 0;
+            gameState.emergencyState.timeLeft = 20;
+
+            document.getElementById('modal-emergency').classList.remove('hidden');
+            renderEmergencyQuestion();
+
+            clearInterval(gameState.emergencyState.timer);
+            gameState.emergencyState.timer = setInterval(() => {
+                gameState.emergencyState.timeLeft--;
+                document.getElementById('em-timer-text').innerText = gameState.emergencyState.timeLeft;
+
+                if (gameState.emergencyState.timeLeft <= 0) {
+                    clearInterval(gameState.emergencyState.timer);
+                    finishEmergencyQuest(false);
+                }
+            }, 1000);
+        }
+
+        function renderEmergencyQuestion() {
+            const currentQ = gameState.emergencyState.questions[gameState.emergencyState.step];
+            document.getElementById('em-quest-step').innerText = gameState.emergencyState.step + 1;
+            document.getElementById('em-scenario-text').innerText = `"${currentQ.text}"`;
+        }
+
+        function submitEmergencyAnswer(typeChoice) {
+            const currentQ = gameState.emergencyState.questions[gameState.emergencyState.step];
+            
+            if (currentQ.type === typeChoice) {
+                playSound('correct');
+                gameState.emergencyState.correctCount++;
+            } else {
+                playSound('wrong');
+            }
+
+            gameState.emergencyState.step++;
+
+            if (gameState.emergencyState.step >= 3) {
+                clearInterval(gameState.emergencyState.timer);
+                const isSuccess = gameState.emergencyState.correctCount >= 3;
+                finishEmergencyQuest(isSuccess);
+            } else {
+                renderEmergencyQuestion();
+            }
+        }
+
+        function finishEmergencyQuest(isSuccess) {
+            document.getElementById('modal-emergency').classList.add('hidden');
+
+            if (isSuccess) {
+                playSound('heal');
+                const healAmount = Math.floor(gameState.hero.maxHp * 0.4);
+                gameState.hero.hp = Math.min(gameState.hero.maxHp, gameState.hero.hp + healAmount);
+                createVisualFX('hero-avatar', 'heal', healAmount);
+                updateUI();
+                setBattleMessage(`💖 <span class="text-pink-600 font-bold">ภารกิจฉุกเฉินสำเร็จ!</span> ฟื้นฟูพลังชีวิต <span class="text-emerald-600 font-bold">+${healAmount} HP</span>!`);
+            } else {
+                playSound('wrong');
+                setBattleMessage(`⚠️ <span class="text-amber-600 font-bold">ภารกิจล้มเหลว!</span> ไม่สามารถจำแนกถูกครบ 3 ข้อในเวลาที่กำหนด`);
+            }
+        }
+
+        function handleVictory() {
+            playSound('victory');
+            document.getElementById('result-icon-box').innerText = '🎉';
+            document.getElementById('result-title').innerText = 'ชัยชนะ!';
+            document.getElementById('result-desc').innerText = `คุณสามารถปราบ ${gameState.monster.name} ได้สำเร็จ! ได้รับโบนัสคะแนน!`;
+            document.getElementById('btn-result-action').innerText = 'ไปยังด่านถัดไป ➔';
+            document.getElementById('modal-result').classList.remove('hidden');
+        }
+
+        function handleDefeat() {
+            playSound('defeat');
+            document.getElementById('result-icon-box').innerText = '😭';
+            document.getElementById('result-title').innerText = 'พ่ายแพ้...';
+            document.getElementById('result-desc').innerText = 'พลังชีวิตของคุณหมดลงแล้ว ทบทวนเรื่องตัวแปรสุ่ม ม.6 แล้วลองสู้ใหม่อีกครั้งนะ!';
+            document.getElementById('btn-result-action').innerText = 'ลองใหม่อีกครั้ง 🔄';
+            document.getElementById('modal-result').classList.remove('hidden');
+        }
+
+        function handleResultAction() {
+            document.getElementById('modal-result').classList.add('hidden');
+
+            if (gameState.hero.hp <= 0) {
+                gameState.stage = 1;
+                gameState.score = 0;
+            } else {
+                gameState.stage++;
+                gameState.score += 250;
+            }
+
+            initStage();
+        }
+    </script>
+</body>
+</html>  
